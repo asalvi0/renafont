@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    strategy:
+      matrix:
+        target:
+          - { os: linux, arch: amd64 }
+          - { os: linux, arch: arm64 }
+          - { os: darwin, arch: amd64 }
+          - { os: darwin, arch: arm64 }
+          - { os: windows, arch: amd64 }
+          - { os: windows, arch: arm64 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+          # go-version-file: "go.mod"
+          cache-dependency-path: "go.sum"
+
+      - name: Cache Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: ${{ runner.os }}-go-
+
+      - name: Build Binaries
+        run: |
+          mkdir -p ./dist
+          GOOS=${{ matrix.target.os }}
+          GOARCH=${{ matrix.target.arch }}
+          output_name="renafont-${{ matrix.target.os }}-${{ matrix.target.arch }}"
+          [ "$GOOS" = "windows" ] && output_name="$output_name.exe"
+          go build -o ./dist/$output_name main.go
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./dist/*
